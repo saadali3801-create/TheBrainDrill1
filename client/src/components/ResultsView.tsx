@@ -9,10 +9,17 @@ import { useEffect, useState } from "react";
 import { SessionResult } from "@/lib/storage";
 import { CATEGORY_ICONS, CATEGORY_LABELS, Category } from "@/lib/questions";
 import { loadStorage } from "@/lib/storage";
+import {
+  BRAIN_TYPE_ICONS,
+  BRAIN_TYPE_LABELS,
+  type BrainType,
+} from "@/lib/adaptive";
 import StreakBadge from "./StreakBadge";
 
 interface ResultsViewProps {
   result: SessionResult;
+  brainType?: BrainType | null;
+  difficulty?: number;
   onRetry: () => void;
 }
 
@@ -21,6 +28,18 @@ const CATEGORY_BAR_COLORS: Record<Category, string> = {
   number_sequences: "oklch(0.72 0.20 260)",
   verbal_analogies: "oklch(0.78 0.17 75)",
   pattern_recognition: "oklch(0.70 0.22 310)",
+};
+
+const DIFF_LABELS: Record<number, string> = {
+  1: "Starter",
+  2: "Challenge",
+  3: "Expert",
+};
+
+const DIFF_COLORS: Record<number, string> = {
+  1: "oklch(0.72 0.18 145)",
+  2: "oklch(0.78 0.17 75)",
+  3: "oklch(0.65 0.22 25)",
 };
 
 function getScoreMessage(
@@ -45,7 +64,12 @@ function getScoreMessage(
   };
 }
 
-export default function ResultsView({ result, onRetry }: ResultsViewProps) {
+export default function ResultsView({
+  result,
+  brainType,
+  difficulty = 1,
+  onRetry,
+}: ResultsViewProps) {
   const storage = loadStorage();
   const { title, sub } = getScoreMessage(result.score, result.total);
   const percentage = Math.round((result.score / result.total) * 100);
@@ -61,13 +85,14 @@ export default function ResultsView({ result, onRetry }: ResultsViewProps) {
     { correct: number; total: number }
   ][];
 
-  // Sort: strong areas first
   const sorted = [...categories].sort(
     (a, b) => b[1].correct / b[1].total - a[1].correct / a[1].total
   );
 
   function handleShare() {
-    const text = `🧠 BrainDrill Daily Score: ${result.score}/${result.total} (${percentage}%)\n🔥 Streak: ${storage.streak} days\nTrain your brain at BrainDrill!`;
+    const diffLabel = DIFF_LABELS[difficulty] ?? "Starter";
+    const brainLabel = brainType ? ` · ${BRAIN_TYPE_LABELS[brainType]}` : "";
+    const text = `BrainDrill Daily Score: ${result.score}/${result.total} (${percentage}%) · ${diffLabel}${brainLabel}\nStreak: ${storage.streak} days\nTrain your brain at BrainDrill!`;
     if (navigator.share) {
       navigator.share({ title: "My BrainDrill Score", text }).catch(() => {});
     } else {
@@ -77,6 +102,9 @@ export default function ResultsView({ result, onRetry }: ResultsViewProps) {
         .catch(() => {});
     }
   }
+
+  const diffColor = DIFF_COLORS[difficulty] ?? DIFF_COLORS[1];
+  const diffLabel = DIFF_LABELS[difficulty] ?? "Starter";
 
   return (
     <div className="w-full max-w-2xl mx-auto fade-up">
@@ -108,9 +136,32 @@ export default function ResultsView({ result, onRetry }: ResultsViewProps) {
         </h2>
         <p className="text-white/40 text-sm">{sub}</p>
 
-        {/* Streak */}
-        <div className="flex justify-center mt-4">
+        {/* Streak + Brain Type row */}
+        <div className="flex items-center justify-center gap-2.5 mt-4 flex-wrap">
           <StreakBadge streak={storage.streak} />
+          {brainType && (
+            <span
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium"
+              style={{
+                color: "oklch(0.78 0.17 75)",
+                borderColor: "oklch(0.78 0.17 75 / 0.30)",
+                background: "oklch(0.78 0.17 75 / 0.08)",
+              }}
+            >
+              <span>{BRAIN_TYPE_ICONS[brainType]}</span>
+              {BRAIN_TYPE_LABELS[brainType]}
+            </span>
+          )}
+          <span
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold mono"
+            style={{
+              color: diffColor,
+              borderColor: diffColor.replace(")", " / 0.30)"),
+              background: diffColor.replace(")", " / 0.08)"),
+            }}
+          >
+            {diffLabel} Level
+          </span>
         </div>
       </div>
 
@@ -197,6 +248,52 @@ export default function ResultsView({ result, onRetry }: ResultsViewProps) {
           </div>
         ))}
       </div>
+
+      {/* Difficulty progress hint */}
+      {percentage >= 80 && difficulty < 3 && (
+        <div
+          className="void-card p-4 mb-4 flex items-center gap-3 opacity-0 fade-up"
+          style={{
+            animationDelay: "360ms",
+            animationFillMode: "forwards",
+            borderColor: "oklch(0.72 0.18 145 / 0.2)",
+          }}
+        >
+          <span
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: "oklch(0.72 0.18 145 / 0.15)", color: "oklch(0.72 0.18 145)" }}
+          >
+            ↑
+          </span>
+          <p className="text-sm text-white/55 leading-snug">
+            Strong session! Keep performing well to unlock{" "}
+            <span style={{ color: DIFF_COLORS[difficulty + 1] }}>
+              {DIFF_LABELS[difficulty + 1]}
+            </span>{" "}
+            difficulty.
+          </p>
+        </div>
+      )}
+      {percentage < 50 && difficulty > 1 && (
+        <div
+          className="void-card p-4 mb-4 flex items-center gap-3 opacity-0 fade-up"
+          style={{
+            animationDelay: "360ms",
+            animationFillMode: "forwards",
+            borderColor: "oklch(0.65 0.22 25 / 0.2)",
+          }}
+        >
+          <span
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: "oklch(0.65 0.22 25 / 0.15)", color: "oklch(0.65 0.22 25)" }}
+          >
+            ↓
+          </span>
+          <p className="text-sm text-white/55 leading-snug">
+            Tough session. Keep drilling — the difficulty adjusts to help you grow.
+          </p>
+        </div>
+      )}
 
       {/* Action buttons */}
       <div

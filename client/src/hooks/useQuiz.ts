@@ -1,21 +1,30 @@
 /**
- * BrainDrill — Quiz Game State Hook
- * Design: Void Interface — amber accent, deep charcoal, full-viewport focus
+ * BrainDrill — Quiz Game State Hook (with adaptive difficulty)
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getSessionQuestions, Question } from "@/lib/questions";
-import { saveSessionResult, SessionResult } from "@/lib/storage";
+import {
+  ensureProfile,
+  getCategoryPerformance,
+  getDifficultyMap,
+  getSeenQuestionIds,
+  recordSeenQuestions,
+  saveSessionPerformance,
+} from "@/lib/adaptive";
+import {
+  getAdaptiveSessionQuestions,
+  getSessionQuestions,
+  type Category,
+  type Difficulty,
+  type Question,
+} from "@/lib/questions";
+import { saveSessionResult, type SessionResult } from "@/lib/storage";
 
-export type QuizPhase =
-  | "idle"
-  | "question"
-  | "revealed"
-  | "finished";
+export type QuizPhase = "idle" | "question" | "revealed" | "finished";
 
 export interface AnswerRecord {
   question: Question;
-  selectedIndex: number | null; // null = timed out
+  selectedIndex: number | null;
   correct: boolean;
   timeExpired: boolean;
 }
@@ -28,6 +37,7 @@ export interface QuizState {
   answers: AnswerRecord[];
   selectedIndex: number | null;
   sessionResult: SessionResult | null;
+  currentDifficulty: Difficulty;
 }
 
 const QUESTION_TIME = 30;
@@ -41,9 +51,11 @@ export function useQuiz() {
     answers: [],
     selectedIndex: null,
     sessionResult: null,
+    currentDifficulty: 1,
   });
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionNumberRef = useRef<number>(0);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -87,7 +99,6 @@ export function useQuiz() {
         }
         if (prev.timeLeft <= 1) {
           clearTimer();
-          // Time expired — will trigger reveal via effect
           return { ...prev, timeLeft: 0 };
         }
         return { ...prev, timeLeft: prev.timeLeft - 1 };
@@ -102,9 +113,39 @@ export function useQuiz() {
     }
   }, [state.phase, state.timeLeft, revealAnswer]);
 
-  const startSession = useCallback(() => {
+  const startSession = useCallback(async () => {
     clearTimer();
-    const questions = getSessionQuestions();
+
+    let questions: Question[];
+    let dominantDiff: Difficulty = 1;
+
+    try {
+      const [perfs, seenIds, profile] = await Promise.all([
+        getCategoryPerformance(),
+        getSeenQuestionIds(),
+        ensureProfile(),
+      ]);
+
+      sessionNumberRef.current = profile.total_sessions + 1;
+      const diffMap = getDifficultyMap(perfs);
+      questions = getAdaptiveSessionQuestions(diffMap, seenIds);
+
+      const diffs = Object.values(diffMap) as Difficulty[];
+      const avg = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+      dominantDiff = Math.min(3, Math.max(1, Math.round(avg))) as Difficulty;
+
+      recordSeenQuestions(
+        questions.map((q) => ({
+          id: q.id,
+          category: q.category as Category,
+          difficulty: q.difficulty as Difficulty,
+        }))
+      ).catch(() => {});
+    } catch {
+      questions = getSessionQuestions();
+      sessionNumberRef.current += 1;
+    }
+
     setState({
       phase: "question",
       questions,
@@ -113,6 +154,7 @@ export function useQuiz() {
       answers: [],
       selectedIndex: null,
       sessionResult: null,
+      currentDifficulty: dominantDiff,
     });
   }, [clearTimer]);
 
@@ -124,7 +166,7 @@ export function useQuiz() {
     return () => {
       if (state.phase !== "question") clearTimer();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.currentIndex]);
 
   const selectAnswer = useCallback(
@@ -139,14 +181,14 @@ export function useQuiz() {
     setState((prev) => {
       const nextIndex = prev.currentIndex + 1;
       if (nextIndex >= prev.questions.length) {
-        // Session complete
         const categoryScores: Record<
           string,
           { correct: number; total: number }
         > = {};
         for (const ans of prev.answers) {
           const cat = ans.question.category;
-          if (!categoryScores[cat]) categoryScores[cat] = { correct: 0, total: 0 };
+          if (!categoryScores[cat])
+            categoryScores[cat] = { correct: 0, total: 0 };
           categoryScores[cat].total += 1;
           if (ans.correct) categoryScores[cat].correct += 1;
         }
@@ -157,7 +199,17 @@ export function useQuiz() {
           total: prev.questions.length,
           categoryScores,
         };
+
         saveSessionResult(result);
+
+        const answerData = prev.answers.map((a) => ({
+          category: a.question.category as Category,
+          correct: a.correct,
+        }));
+        saveSessionPerformance(answerData, sessionNumberRef.current).catch(
+          () => {}
+        );
+
         return {
           ...prev,
           phase: "finished",
@@ -184,10 +236,10 @@ export function useQuiz() {
       answers: [],
       selectedIndex: null,
       sessionResult: null,
+      currentDifficulty: 1,
     });
   }, [clearTimer]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => clearTimer();
   }, [clearTimer]);

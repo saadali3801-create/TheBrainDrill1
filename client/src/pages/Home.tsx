@@ -3,21 +3,23 @@
  * Design: Void Interface — radical negative space, amber urgency, full-viewport cognitive focus
  * Typography: Sora (body) + JetBrains Mono (numerals)
  * Colors: Deep blue-black void + amber accent
- *
- * Sections:
- * 1. Hero — brain image, tagline, start CTA, streak display
- * 2. Quiz session (inline, replaces hero)
- * 3. Results (inline, replaces quiz)
- * 4. Footer with Suggestions + Contact buttons
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuiz } from "@/hooks/useQuiz";
 import { getCurrentStreak } from "@/lib/storage";
 import QuizCard from "@/components/QuizCard";
 import ResultsView from "@/components/ResultsView";
 import StreakBadge from "@/components/StreakBadge";
 import ContactModal from "@/components/ContactModal";
+import OnboardingFlow from "@/components/OnboardingFlow";
+import {
+  ensureProfile,
+  BRAIN_TYPE_ICONS,
+  BRAIN_TYPE_LABELS,
+  type BrainType,
+  type UserProfile,
+} from "@/lib/adaptive";
 import { CATEGORY_ICONS, CATEGORY_LABELS } from "@/lib/questions";
 
 const HERO_BG =
@@ -32,9 +34,24 @@ const CATEGORIES = [
   { key: "pattern_recognition" as const, color: "oklch(0.70 0.22 310)" },
 ];
 
+const DIFF_LABELS: Record<number, string> = {
+  1: "Starter",
+  2: "Challenge",
+  3: "Expert",
+};
+
+const DIFF_COLORS: Record<number, string> = {
+  1: "oklch(0.72 0.18 145)",
+  2: "oklch(0.78 0.17 75)",
+  3: "oklch(0.65 0.22 25)",
+};
+
 export default function Home() {
   const { state, startSession, selectAnswer, nextQuestion, resetSession } = useQuiz();
   const [modalMode, setModalMode] = useState<"contact" | "suggestion" | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const streak = getCurrentStreak();
 
   const isIdle = state.phase === "idle";
@@ -43,6 +60,62 @@ export default function Home() {
 
   const lastAnswer =
     state.answers.length > 0 ? state.answers[state.answers.length - 1] : null;
+
+  useEffect(() => {
+    ensureProfile()
+      .then((p) => {
+        setProfile(p);
+        if (!p.onboarding_completed) {
+          setShowOnboarding(true);
+        }
+        setProfileLoaded(true);
+      })
+      .catch(() => {
+        setProfileLoaded(true);
+      });
+  }, []);
+
+  function handleOnboardingComplete(brainType: BrainType) {
+    setProfile((prev) =>
+      prev
+        ? { ...prev, brain_type: brainType, onboarding_completed: true }
+        : {
+            device_id: "",
+            brain_type: brainType,
+            onboarding_completed: true,
+            total_sessions: 0,
+          }
+    );
+    setShowOnboarding(false);
+  }
+
+  // Show onboarding before anything else (once profile is loaded)
+  if (profileLoaded && showOnboarding) {
+    return (
+      <div
+        className="min-h-screen flex flex-col"
+        style={{ background: "oklch(0.10 0.008 265)" }}
+      >
+        <nav
+          className="sticky top-0 z-50 border-b border-white/5 backdrop-blur-xl"
+          style={{ background: "oklch(0.10 0.008 265 / 88%)" }}
+        >
+          <div className="max-w-2xl mx-auto px-4 sm:px-6 h-14 flex items-center">
+            <div className="flex items-center gap-2.5">
+              <img src={LOGO_ICON} alt="BrainDrill" className="w-7 h-7 object-contain" />
+              <span className="font-bold text-white tracking-tight text-lg">
+                Brain<span style={{ color: "oklch(0.78 0.17 75)" }}>Drill</span>
+              </span>
+            </div>
+          </div>
+        </nav>
+        <OnboardingFlow onComplete={handleOnboardingComplete} />
+      </div>
+    );
+  }
+
+  const brainType = profile?.brain_type ?? null;
+  const diffLevel = state.currentDifficulty ?? 1;
 
   return (
     <div
@@ -71,6 +144,33 @@ export default function Home() {
           </button>
 
           <div className="flex items-center gap-2">
+            {/* Brain type badge in nav */}
+            {brainType && !isActive && (
+              <span
+                className="hidden sm:flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border"
+                style={{
+                  color: "oklch(0.78 0.17 75)",
+                  borderColor: "oklch(0.78 0.17 75 / 0.25)",
+                  background: "oklch(0.78 0.17 75 / 0.08)",
+                }}
+              >
+                <span>{BRAIN_TYPE_ICONS[brainType]}</span>
+                {BRAIN_TYPE_LABELS[brainType]}
+              </span>
+            )}
+            {/* Difficulty badge during quiz */}
+            {isActive && (
+              <span
+                className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border mono"
+                style={{
+                  color: DIFF_COLORS[diffLevel],
+                  borderColor: `${DIFF_COLORS[diffLevel].replace(")", " / 0.3)")}`,
+                  background: `${DIFF_COLORS[diffLevel].replace(")", " / 0.08)")}`,
+                }}
+              >
+                {DIFF_LABELS[diffLevel]}
+              </span>
+            )}
             <StreakBadge streak={streak} />
             {isActive && (
               <button
@@ -102,7 +202,6 @@ export default function Home() {
                   className="w-full h-full object-cover"
                   style={{ filter: "brightness(0.65)" }}
                 />
-                {/* Gradient overlay */}
                 <div
                   className="absolute inset-0"
                   style={{
@@ -110,7 +209,6 @@ export default function Home() {
                       "linear-gradient(to bottom, oklch(0.10 0.008 265 / 0%) 20%, oklch(0.10 0.008 265 / 95%) 100%)",
                   }}
                 />
-                {/* Text overlay */}
                 <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-7">
                   <p
                     className="text-xs font-semibold uppercase tracking-[0.2em] mb-2"
@@ -127,6 +225,43 @@ export default function Home() {
                   </h1>
                 </div>
               </div>
+
+              {/* Brain Type card — shown if onboarded */}
+              {brainType && (
+                <div
+                  className="void-card p-4 mb-6 flex items-center gap-4"
+                  style={{ borderColor: "oklch(0.78 0.17 75 / 0.15)" }}
+                >
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold shrink-0"
+                    style={{
+                      background: "oklch(0.78 0.17 75 / 0.12)",
+                      border: "1px solid oklch(0.78 0.17 75 / 0.25)",
+                      color: "oklch(0.78 0.17 75)",
+                    }}
+                  >
+                    {BRAIN_TYPE_ICONS[brainType]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-white/30 uppercase tracking-wider mb-0.5">
+                      Your Brain Type
+                    </p>
+                    <p className="text-sm font-semibold text-white">
+                      {BRAIN_TYPE_LABELS[brainType]}
+                    </p>
+                  </div>
+                  {profile && profile.total_sessions > 0 && (
+                    <div className="shrink-0 text-right">
+                      <p className="mono text-lg font-bold text-white/70">
+                        {profile.total_sessions}
+                      </p>
+                      <p className="text-xs text-white/25 uppercase tracking-wide">
+                        Sessions
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Description */}
               <p className="text-white/45 text-sm sm:text-base leading-relaxed mb-7 text-center">
@@ -175,7 +310,7 @@ export default function Home() {
                 </p>
               ) : (
                 <p className="text-center text-white/25 text-sm mb-10">
-                  Complete a session to start your streak 🔥
+                  Complete a session to start your streak
                 </p>
               )}
 
@@ -198,8 +333,8 @@ export default function Home() {
                     },
                     {
                       icon: "📊",
-                      title: "Track Progress",
-                      desc: "See your strong and weak areas after every session.",
+                      title: "Adaptive Difficulty",
+                      desc: "Questions get harder as you improve. The app learns you.",
                     },
                     {
                       icon: "🔥",
@@ -244,6 +379,8 @@ export default function Home() {
           {isFinished && state.sessionResult && (
             <ResultsView
               result={state.sessionResult}
+              brainType={brainType}
+              difficulty={diffLevel}
               onRetry={() => {
                 resetSession();
                 setTimeout(startSession, 50);
