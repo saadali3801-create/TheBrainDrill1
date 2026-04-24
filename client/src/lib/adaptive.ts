@@ -417,6 +417,7 @@ export interface OnboardingAnswers {
   pace: string;
   strength: string;
   challenge: string;
+  interests: string;
   goal: string;
 }
 
@@ -463,6 +464,14 @@ export function assignBrainType(answers: OnboardingAnswers): BrainType {
   if (pa === "fast") { scores.strategist += 1; scores.calculator += 1; }
   if (pa === "steady") { scores.analyst += 1; scores.wordsmith += 1; }
   if (pa === "thorough") { scores.analyst += 2; }
+
+  // interests scoring
+  const int = answers.interests;
+  if (int === "science") { scores.calculator += 2; scores.analyst += 1; }
+  if (int === "language") { scores.wordsmith += 2; scores.explorer += 1; }
+  if (int === "puzzles") { scores.pattern_hunter += 2; scores.strategist += 1; }
+  if (int === "nature") { scores.explorer += 2; scores.analyst += 1; }
+  if (int === "abstract") { scores.strategist += 2; scores.pattern_hunter += 1; }
 
   // goal scoring
   const go = answers.goal;
@@ -534,4 +543,96 @@ export function getBrainTypeCategoryWeights(
   };
 
   return weights[brainType];
+}
+
+/**
+ * Calculate progressive complexity based on session count.
+ * As users complete more sessions, base difficulty ramps up.
+ * Returns a difficulty floor (minimum difficulty for question selection).
+ */
+export function getProgressiveComplexity(totalSessions: number): {
+  difficultyFloor: Difficulty;
+  sessionTier: "beginner" | "intermediate" | "advanced" | "expert";
+  tierProgress: number; // 0-100% progress within current tier
+} {
+  // Tier thresholds
+  if (totalSessions < 5) {
+    return {
+      difficultyFloor: 1,
+      sessionTier: "beginner",
+      tierProgress: Math.round((totalSessions / 5) * 100),
+    };
+  } else if (totalSessions < 15) {
+    return {
+      difficultyFloor: 1,
+      sessionTier: "intermediate",
+      tierProgress: Math.round(((totalSessions - 5) / 10) * 100),
+    };
+  } else if (totalSessions < 30) {
+    return {
+      difficultyFloor: 2,
+      sessionTier: "advanced",
+      tierProgress: Math.round(((totalSessions - 15) / 15) * 100),
+    };
+  } else {
+    return {
+      difficultyFloor: 2,
+      sessionTier: "expert",
+      tierProgress: Math.min(100, Math.round(((totalSessions - 30) / 20) * 100)),
+    };
+  }
+}
+
+/**
+ * Apply progressive complexity to category difficulties.
+ * Ensures difficulty never drops below the session-based floor.
+ */
+export function applyProgressiveComplexity(
+  categoryDifficulties: Record<Category, Difficulty>,
+  totalSessions: number
+): Record<Category, Difficulty> {
+  const { difficultyFloor } = getProgressiveComplexity(totalSessions);
+  
+  const adjusted: Record<Category, Difficulty> = {
+    logical_reasoning: 1,
+    number_sequences: 1,
+    verbal_analogies: 1,
+    pattern_recognition: 1,
+  };
+  
+  for (const cat of Object.keys(categoryDifficulties) as Category[]) {
+    const current = categoryDifficulties[cat];
+    // Apply floor but don't exceed max difficulty of 3
+    adjusted[cat] = Math.max(difficultyFloor, current) as Difficulty;
+  }
+  
+  return adjusted;
+}
+
+/**
+ * Get category priority based on brain type and performance.
+ * Categories where user struggles get boosted, matched with brain type preferences.
+ */
+export function getCategoryPriority(
+  brainType: BrainType | null,
+  perfs: CategoryPerf[]
+): Record<Category, number> {
+  const weights = getBrainTypeCategoryWeights(brainType);
+  const priorities: Record<Category, number> = { ...weights };
+  
+  // Boost struggling categories (lower accuracy = higher priority)
+  for (const perf of perfs) {
+    if (perf.total_count >= 3) {
+      const accuracy = perf.correct_count / perf.total_count;
+      if (accuracy < 0.5) {
+        // Struggling - boost priority by 30%
+        priorities[perf.category] *= 1.3;
+      } else if (accuracy > 0.8) {
+        // Excelling - slightly reduce priority
+        priorities[perf.category] *= 0.9;
+      }
+    }
+  }
+  
+  return priorities;
 }

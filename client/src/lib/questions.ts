@@ -742,13 +742,19 @@ export function getAllByCategory(category: Category): Question[] {
 
 /**
  * Adaptive session question selector.
- * Given per-category difficulty levels and seen question IDs,
+ * Given per-category difficulty levels, seen question IDs, and optional weighting,
  * selects 10 questions at the appropriate difficulty,
  * falling back to adjacent tiers if the current tier is exhausted.
+ * 
+ * Enhanced features:
+ * - Respects category weights from brain type
+ * - Prioritizes unseen questions (no repeats until pool exhausted)
+ * - Falls back gracefully when questions run out
  */
 export function getAdaptiveSessionQuestions(
   categoryDifficulty: Record<Category, Difficulty>,
-  seenIds: Set<string>
+  seenIds: Set<string>,
+  categoryWeights?: Record<Category, number>
 ): Question[] {
   const categories: Category[] = [
     "logical_reasoning",
@@ -757,14 +763,36 @@ export function getAdaptiveSessionQuestions(
     "pattern_recognition",
   ];
 
-  const counts = [3, 3, 2, 2];
+  // Default distribution: 3, 3, 2, 2 = 10 questions
+  // Adjust based on category weights if provided
+  let counts = [3, 3, 2, 2];
+  
+  if (categoryWeights) {
+    // Calculate weighted distribution
+    const totalWeight = categories.reduce((sum, cat) => sum + (categoryWeights[cat] ?? 1), 0);
+    const rawCounts = categories.map(cat => {
+      const weight = categoryWeights[cat] ?? 1;
+      return (weight / totalWeight) * 10;
+    });
+    
+    // Round and adjust to ensure exactly 10 questions
+    counts = rawCounts.map(c => Math.round(c));
+    const diff = 10 - counts.reduce((a, b) => a + b, 0);
+    if (diff !== 0) {
+      // Add/remove from highest weighted category
+      const maxIdx = rawCounts.indexOf(Math.max(...rawCounts));
+      counts[maxIdx] += diff;
+    }
+  }
+  
   const shuffledCats = [...categories].sort(() => Math.random() - 0.5);
   const selected: Question[] = [];
 
   shuffledCats.forEach((cat, i) => {
     const targetDiff = categoryDifficulty[cat] ?? 1;
-    const needed = counts[i];
+    const needed = counts[categories.indexOf(cat)];
 
+    // Prioritize target difficulty, then adjacent ones
     const diffOrder: Difficulty[] =
       targetDiff === 1
         ? [1, 2, 3]
@@ -773,6 +801,8 @@ export function getAdaptiveSessionQuestions(
         : [3, 2, 1];
 
     const picked: Question[] = [];
+    
+    // First pass: unseen questions at preferred difficulty
     for (const diff of diffOrder) {
       if (picked.length >= needed) break;
       const pool = questionBank
@@ -787,8 +817,9 @@ export function getAdaptiveSessionQuestions(
       picked.push(...pool.slice(0, needed - picked.length));
     }
 
-    // If still not enough, allow previously seen questions
+    // If still not enough, allow previously seen questions (pool exhausted)
     if (picked.length < needed) {
+      // Reset seen IDs for this category - user has seen all questions
       const fallback = questionBank
         .filter(
           (q) =>

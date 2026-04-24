@@ -249,12 +249,51 @@ export default function ResultsView({
         ))}
       </div>
 
+      {/* Adaptive Learning Callout */}
+      <div
+        className="void-card p-4 mb-4 opacity-0 fade-up"
+        style={{
+          animationDelay: "340ms",
+          animationFillMode: "forwards",
+          borderColor: "oklch(0.72 0.20 260 / 0.2)",
+        }}
+      >
+        <div className="flex items-start gap-3">
+          <span
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm"
+            style={{ background: "oklch(0.72 0.20 260 / 0.15)", color: "oklch(0.72 0.20 260)" }}
+          >
+            ⚡
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-white/70 mb-1">
+              Learning your patterns
+            </p>
+            <p className="text-xs text-white/40 leading-relaxed">
+              {(() => {
+                const weakCats = sorted.filter(([_, s]) => s.total > 0 && s.correct / s.total < 0.5);
+                const strongCats = sorted.filter(([_, s]) => s.total > 0 && s.correct / s.total >= 0.67);
+                
+                if (weakCats.length > 0) {
+                  const weakNames = weakCats.slice(0, 2).map(([c]) => CATEGORY_LABELS[c]).join(" and ");
+                  return `Next session will include easier questions in ${weakNames} to help you improve.`;
+                }
+                if (strongCats.length === sorted.length) {
+                  return "Excellent across all categories! Expect harder challenges next session.";
+                }
+                return "The app is calibrating to your performance. Each session gets smarter.";
+              })()}
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Difficulty progress hint */}
       {percentage >= 80 && difficulty < 3 && (
         <div
           className="void-card p-4 mb-4 flex items-center gap-3 opacity-0 fade-up"
           style={{
-            animationDelay: "360ms",
+            animationDelay: "400ms",
             animationFillMode: "forwards",
             borderColor: "oklch(0.72 0.18 145 / 0.2)",
           }}
@@ -278,7 +317,7 @@ export default function ResultsView({
         <div
           className="void-card p-4 mb-4 flex items-center gap-3 opacity-0 fade-up"
           style={{
-            animationDelay: "360ms",
+            animationDelay: "400ms",
             animationFillMode: "forwards",
             borderColor: "oklch(0.65 0.22 25 / 0.2)",
           }}

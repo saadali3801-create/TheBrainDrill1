@@ -17,6 +17,7 @@ import {
   ensureProfile,
   BRAIN_TYPE_ICONS,
   BRAIN_TYPE_LABELS,
+  getProgressiveComplexity,
   type BrainType,
   type UserProfile,
 } from "@/lib/adaptive";
@@ -229,37 +230,95 @@ export default function Home() {
               {/* Brain Type card — shown if onboarded */}
               {brainType && (
                 <div
-                  className="void-card p-4 mb-6 flex items-center gap-4"
+                  className="void-card p-4 mb-6"
                   style={{ borderColor: "oklch(0.78 0.17 75 / 0.15)" }}
                 >
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold shrink-0"
-                    style={{
-                      background: "oklch(0.78 0.17 75 / 0.12)",
-                      border: "1px solid oklch(0.78 0.17 75 / 0.25)",
-                      color: "oklch(0.78 0.17 75)",
-                    }}
-                  >
-                    {BRAIN_TYPE_ICONS[brainType]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-white/30 uppercase tracking-wider mb-0.5">
-                      Your Brain Type
-                    </p>
-                    <p className="text-sm font-semibold text-white">
-                      {BRAIN_TYPE_LABELS[brainType]}
-                    </p>
-                  </div>
-                  {profile && profile.total_sessions > 0 && (
-                    <div className="shrink-0 text-right">
-                      <p className="mono text-lg font-bold text-white/70">
-                        {profile.total_sessions}
+                  <div className="flex items-center gap-4 mb-3">
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold shrink-0"
+                      style={{
+                        background: "oklch(0.78 0.17 75 / 0.12)",
+                        border: "1px solid oklch(0.78 0.17 75 / 0.25)",
+                        color: "oklch(0.78 0.17 75)",
+                      }}
+                    >
+                      {BRAIN_TYPE_ICONS[brainType]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white/30 uppercase tracking-wider mb-0.5">
+                        Your Brain Type
                       </p>
-                      <p className="text-xs text-white/25 uppercase tracking-wide">
-                        Sessions
+                      <p className="text-sm font-semibold text-white">
+                        {BRAIN_TYPE_LABELS[brainType]}
                       </p>
                     </div>
-                  )}
+                    {profile && profile.total_sessions > 0 && (
+                      <div className="shrink-0 text-right">
+                        <p className="mono text-lg font-bold text-white/70">
+                          {profile.total_sessions}
+                        </p>
+                        <p className="text-xs text-white/25 uppercase tracking-wide">
+                          Sessions
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Progressive Tier Progress */}
+                  {profile && (() => {
+                    const { sessionTier, tierProgress } = getProgressiveComplexity(profile.total_sessions);
+                    const tierLabels = {
+                      beginner: "Beginner",
+                      intermediate: "Intermediate", 
+                      advanced: "Advanced",
+                      expert: "Expert"
+                    };
+                    const tierColors = {
+                      beginner: "oklch(0.72 0.18 145)",
+                      intermediate: "oklch(0.72 0.20 260)",
+                      advanced: "oklch(0.78 0.17 75)",
+                      expert: "oklch(0.65 0.22 25)"
+                    };
+                    const nextTier = {
+                      beginner: "Intermediate",
+                      intermediate: "Advanced",
+                      advanced: "Expert",
+                      expert: null
+                    };
+                    
+                    return (
+                      <div className="pt-3 border-t border-white/5">
+                        <div className="flex items-center justify-between mb-2">
+                          <span 
+                            className="text-xs font-semibold uppercase tracking-wide"
+                            style={{ color: tierColors[sessionTier] }}
+                          >
+                            {tierLabels[sessionTier]} Tier
+                          </span>
+                          {nextTier[sessionTier] && (
+                            <span className="text-xs text-white/30">
+                              {tierProgress}% to {nextTier[sessionTier]}
+                            </span>
+                          )}
+                        </div>
+                        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{ 
+                              width: `${tierProgress}%`,
+                              background: tierColors[sessionTier]
+                            }}
+                          />
+                        </div>
+                        <p className="text-xs text-white/25 mt-2">
+                          {sessionTier === "expert" 
+                            ? "You've mastered all tiers. Questions scale to your expertise."
+                            : "Complete more sessions to unlock harder challenges."
+                          }
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 

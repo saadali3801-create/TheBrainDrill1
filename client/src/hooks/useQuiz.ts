@@ -4,9 +4,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  applyProgressiveComplexity,
   ensureProfile,
+  getBrainTypeCategoryWeights,
   getCategoryPerformance,
+  getCategoryPriority,
   getDifficultyMap,
+  getProgressiveComplexity,
   getSeenQuestionIds,
   recordSeenQuestions,
   saveSessionPerformance,
@@ -127,12 +131,28 @@ export function useQuiz() {
       ]);
 
       sessionNumberRef.current = profile.total_sessions + 1;
-      const diffMap = getDifficultyMap(perfs);
-      questions = getAdaptiveSessionQuestions(diffMap, seenIds);
+      
+      // Get base difficulty map from category performance
+      const baseDiffMap = getDifficultyMap(perfs);
+      
+      // Apply progressive complexity based on total sessions
+      // This ensures difficulty floor rises as user progresses
+      const diffMap = applyProgressiveComplexity(baseDiffMap, profile.total_sessions);
+      
+      // Get category weights based on brain type and performance
+      // This adjusts question distribution to match user's profile
+      const categoryPriority = getCategoryPriority(profile.brain_type, perfs);
+      
+      // Select questions with adaptive difficulty and brain type weighting
+      questions = getAdaptiveSessionQuestions(diffMap, seenIds, categoryPriority);
 
+      // Calculate dominant difficulty for UI display
+      const { difficultyFloor, sessionTier } = getProgressiveComplexity(profile.total_sessions);
       const diffs = Object.values(diffMap) as Difficulty[];
       const avg = diffs.reduce((a, b) => a + b, 0) / diffs.length;
-      dominantDiff = Math.min(3, Math.max(1, Math.round(avg))) as Difficulty;
+      
+      // Use the higher of floor or average for display
+      dominantDiff = Math.min(3, Math.max(difficultyFloor, Math.round(avg))) as Difficulty;
 
       recordSeenQuestions(
         questions.map((q) => ({

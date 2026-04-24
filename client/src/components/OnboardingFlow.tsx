@@ -80,6 +80,18 @@ const STEPS: Step[] = [
     ],
   },
   {
+    key: "interests",
+    question: "What topics excite your mind?",
+    subtitle: "We'll tune question themes to match.",
+    options: [
+      { value: "science", label: "Science & technology", emoji: "⚛" },
+      { value: "language", label: "Language & literature", emoji: "✎" },
+      { value: "puzzles", label: "Puzzles & games", emoji: "⧉" },
+      { value: "nature", label: "Nature & systems", emoji: "⊛" },
+      { value: "abstract", label: "Abstract reasoning", emoji: "⬡" },
+    ],
+  },
+  {
     key: "goal",
     question: "What's your #1 goal with BrainDrill?",
     options: [
@@ -179,22 +191,24 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
             style={{ borderColor: "oklch(0.78 0.17 75 / 0.15)" }}
           >
             <h3 className="text-xs font-semibold text-white/30 uppercase tracking-widest mb-4">
-              What this means for you
+              How BrainDrill learns you
             </h3>
             <div className="space-y-3">
               {[
-                "Questions are tuned to your natural strengths",
-                "Difficulty adapts as you improve in each category",
-                "Your weakest areas get extra attention over time",
+                { text: "Question themes matched to your interests", icon: "◈" },
+                { text: "Category weighting based on your brain type", icon: "⚙" },
+                { text: "Difficulty adapts per category as you improve", icon: "↑" },
+                { text: "Progressive complexity as you complete sessions", icon: "◎" },
+                { text: "No repeats until you've seen the full question pool", icon: "∞" },
               ].map((item, i) => (
                 <div key={i} className="flex items-start gap-2.5">
                   <span
-                    className="w-4 h-4 rounded-full flex items-center justify-center text-xs shrink-0 mt-0.5"
+                    className="w-5 h-5 rounded-md flex items-center justify-center text-xs shrink-0 mt-0.5"
                     style={{ background: "oklch(0.78 0.17 75 / 0.15)", color: "oklch(0.78 0.17 75)" }}
                   >
-                    ✓
+                    {item.icon}
                   </span>
-                  <span className="text-sm text-white/60 leading-snug">{item}</span>
+                  <span className="text-sm text-white/60 leading-snug">{item.text}</span>
                 </div>
               ))}
             </div>
